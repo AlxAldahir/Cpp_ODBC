@@ -4,8 +4,110 @@
 #include <sql.h>       // Incluye funciones core de ODBC
 #include <sqlext.h>    // Incluye funciones extendidas de ODBC
 #include <string>      // Manejo de cadenas de texto
+#include <vector>      // Para almacenar los nombres de columnas
+#include <iomanip>     // Para formateo de salida
 
 using namespace std; 
+
+// Función para ejecutar consulta y mostrar resultados
+// Parámetros:
+// - hdbc: Manejador de la conexión a la base de datos
+// - consulta: Consulta SQL a ejecutar en formato wide char
+// - nombreTabla: Nombre de la tabla para mostrar en los resultados
+static void ejecutarConsulta(SQLHDBC hdbc, const wchar_t* consulta, const char* nombreTabla) {
+    SQLHSTMT hstmt;    // Manejador para la sentencia SQL
+    SQLRETURN ret;     // Variable para almacenar resultados de operaciones ODBC
+
+    // Crear manejador para la consulta - necesario para ejecutar sentencias SQL
+    ret = SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        cout << "Error al crear el handle de la consulta" << endl;
+        return;
+    }
+
+    // Ejecutar la consulta SQL directamente usando SQLExecDirectW para soporte Unicode
+    ret = SQLExecDirectW(hstmt, (SQLWCHAR*)consulta, SQL_NTS);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        cout << "Error al ejecutar la consulta para " << nombreTabla << endl;
+        SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+        return;
+    }
+
+    cout << "\nDatos de la tabla " << nombreTabla << ":\n" << endl;
+
+    // Obtener el número total de columnas en el resultado de la consulta
+    SQLSMALLINT numCols;
+    SQLNumResultCols(hstmt, &numCols);
+
+    // Crear vectores para almacenar información de las columnas
+    vector<wstring> columnNames(numCols);      // Almacena nombres de columnas
+	vector<SQLLEN> columnSizes(numCols);       // Almacena anchos de columnas
+
+    // Obtener metadatos de cada columna (nombre y tamaño para formato)
+    for (SQLSMALLINT i = 1; i <= numCols; i++) {
+        SQLWCHAR columnName[128];              // Buffer para nombre de columna
+        SQLSMALLINT columnNameLength;          // Longitud del nombre
+        SQLLEN columnSize;                     // Tamaño de la columna 
+
+        // Obtener nombre de la columna
+        SQLColAttributeW(hstmt, i, SQL_DESC_NAME, columnName, sizeof(columnName), &columnNameLength, NULL);
+        // Obtener ancho de visualización de la columna
+        SQLColAttributeW(hstmt, i, SQL_DESC_DISPLAY_SIZE, NULL, 0, NULL, &columnSize);
+
+        // Guardar nombre y calcular ancho máximo entre nombre y contenido
+        columnNames[i-1] = columnName;
+        columnSizes[i-1] = max((SQLLEN)columnNames[i-1].length(), columnSize);
+    }
+
+    // Imprimir línea superior de la tabla
+    for (SQLSMALLINT i = 0; i < numCols; i++) {
+        wcout << wstring(columnSizes[i] + 2, L'-') << L"+";
+    }
+    wcout << endl;
+
+    // Imprimir encabezados de columnas
+    for (SQLSMALLINT i = 0; i < numCols; i++) {
+        wcout << L" " << left << setw(columnSizes[i]) << columnNames[i] << L" |";
+    }
+    wcout << endl;
+
+    // Imprimir línea separadora después de encabezados
+    for (SQLSMALLINT i = 0; i < numCols; i++) {
+        wcout << wstring(columnSizes[i] + 2, L'-') << L"+";
+    }
+    wcout << endl;
+
+    // Recuperar y mostrar cada fila de resultados
+    while (SQL_SUCCESS == SQLFetch(hstmt)) {
+        for (SQLSMALLINT i = 1; i <= numCols; i++) {
+            SQLWCHAR buffer[512];              // Buffer para datos de columna
+            SQLLEN indicator;                  // Indicador de nulo/longitud
+            
+            // Obtener dato de la columna actual
+            ret = SQLGetData(hstmt, i, SQL_C_WCHAR, buffer, sizeof(buffer), &indicator);
+            if (SQL_SUCCESS == ret || SQL_SUCCESS_WITH_INFO == ret) {
+                wcout << L" ";
+                // Manejar valores NULL y mostrar datos con formato
+                if (indicator == SQL_NULL_DATA)
+                    wcout << left << setw(columnSizes[i-1]) << L"NULL";
+                else
+                    wcout << left << setw(columnSizes[i-1]) << buffer;
+                wcout << L" |";
+            }
+        }
+        wcout << endl;
+    }
+
+    // Imprimir línea inferior de la tabla
+    for (SQLSMALLINT i = 0; i < numCols; i++) {
+        wcout << wstring(columnSizes[i] + 2, L'-') << L"+";
+    }
+    wcout << endl;
+
+    // Liberar el manejador de la sentencia SQL
+    SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+}
+
 
 // Función principal
 int main() {
@@ -61,6 +163,18 @@ int main() {
    }
 
    cout << "Conexion exitosa a la base de datos!" << endl;
+
+   // Consultas para cada tabla
+   const wchar_t* consultaCentro = L"SELECT * FROM Catalogo_Centro";
+   const wchar_t* consultaPuesto = L"SELECT * FROM Catalogo_Puesto";
+   const wchar_t* consultaEmpleado = L"SELECT * FROM Empleado";
+   const wchar_t* consultaDirectivo = L"SELECT * FROM Directivo";
+
+   // Ejecutar consultas
+   ejecutarConsulta(hdbc, consultaCentro, "Catalogo_Centro");
+   ejecutarConsulta(hdbc, consultaPuesto, "Catalogo_Puesto");
+   ejecutarConsulta(hdbc, consultaEmpleado, "Empleado");
+   ejecutarConsulta(hdbc, consultaDirectivo, "Directivo");
 
    // Paso 6: Cerrar la conexión y liberar recursos
    SQLDisconnect(hdbc);                        // Desconectar de la base de datos
