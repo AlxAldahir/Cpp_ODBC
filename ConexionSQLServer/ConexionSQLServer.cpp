@@ -164,17 +164,22 @@ int main() {
 
    cout << "Conexion exitosa a la base de datos!" << endl;
 
-   // Consultas para cada tabla
-   const wchar_t* consultaCentro = L"SELECT * FROM Catalogo_Centro";
-   const wchar_t* consultaPuesto = L"SELECT * FROM Catalogo_Puesto";
-   const wchar_t* consultaEmpleado = L"SELECT * FROM Empleado";
-   const wchar_t* consultaDirectivo = L"SELECT * FROM Directivo";
+   // Consulta para el reporte personalizado
+   const wchar_t* consultaReporte = L"SELECT "
+       L"E.Empleado_id, "
+       L"E.Nombre + ' ' + E.Apellido_paterno + ' ' + E.Apellido_materno as NombreCompleto, "
+       L"E.Fecha_nacimiento, "
+       L"E.RFC, "
+       L"CC.Nombre_centro, "
+       L"CP.Nombre_puesto, "
+       L"CASE WHEN D.Empleado_id IS NOT NULL THEN 'SI' ELSE 'NO' END as EsDirectivo "
+       L"FROM Empleado E "
+       L"LEFT JOIN Catalogo_Centro CC ON E.Centro_id = CC.Centro_id "
+       L"LEFT JOIN Catalogo_Puesto CP ON E.Puesto_id = CP.Puesto_id "
+       L"LEFT JOIN Directivo D ON E.Empleado_id = D.Empleado_id;";
 
-   // Ejecutar consultas
-   ejecutarConsulta(hdbc, consultaCentro, "Catalogo_Centro");
-   ejecutarConsulta(hdbc, consultaPuesto, "Catalogo_Puesto");
-   ejecutarConsulta(hdbc, consultaEmpleado, "Empleado");
-   ejecutarConsulta(hdbc, consultaDirectivo, "Directivo");
+   // Ejecutar consulta del reporte
+   ejecutarConsulta(hdbc, consultaReporte, "Reporte de Empleados");
 
    // Paso 6: Cerrar la conexión y liberar recursos
    SQLDisconnect(hdbc);                        // Desconectar de la base de datos
